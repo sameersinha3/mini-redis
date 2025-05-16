@@ -23,3 +23,15 @@ func (s *Store) Set(key, value string) {
     defer s.mu.Unlock()
     s.store[key] = value
 }
+
+func (s *Store) Delete(key string) bool {
+    s.mu.Lock()
+    defer s.mu.Unlock()
+    
+    if _, exists := s.store[key]; !exists {
+        return false
+    }
+    
+    delete(s.store, key)
+    return true
+}

@@ -20,7 +20,9 @@ func NewHandler(store *kv.Store, peers *cluster.PeerManager) *Handler {
     r := mux.NewRouter()
     r.HandleFunc("/set", h.SetHandler).Methods("POST")
     r.HandleFunc("/get/{key}", h.GetHandler).Methods("GET")
+    r.HandleFunc("/delete/{key}", h.DeleteHandler).Methods("DELETE")
     r.HandleFunc("/replicate", h.ReplicationHandler).Methods("POST")
+    r.HandleFunc("/replicate/delete", h.ReplicateDeleteHandler).Methods("POST")
     h.router = r
     return h
 }
@@ -31,12 +33,20 @@ func (h *Handler) Router() http.Handler {
 
 func (h *Handler) SetHandler(w http.ResponseWriter, r *http.Request) {
     var data map[string]string
-    json.NewDecoder(r.Body).Decode(&data)
+    if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+        http.Error(w, "Invalid request body", http.StatusBadRequest)
+        return
+    }
     key := data["key"]
     value := data["value"]
+    if key == "" {
+        http.Error(w, "Key is required", http.StatusBadRequest)
+        return
+    }
     h.store.Set(key, value)
     h.peers.Replicate(key, value)
     w.WriteHeader(http.StatusOK)
+    json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 }
 
 func (h *Handler) GetHandler(w http.ResponseWriter, r *http.Request) {
@@ -50,11 +60,41 @@ func (h *Handler) GetHandler(w http.ResponseWriter, r *http.Request) {
     json.NewEncoder(w).Encode(map[string]string{"value": val})
 }
 
+func (h *Handler) DeleteHandler(w http.ResponseWriter, r *http.Request) {
+    vars := mux.Vars(r)
+    key := vars["key"]
+    
+    if deleted := h.store.Delete(key); !deleted {
+        http.NotFound(w, r)
+        return
+    }
+    
+    // Notify peers about the deletion
+    h.peers.ReplicateDelete(key)
+    
+    w.WriteHeader(http.StatusOK)
+    json.NewEncoder(w).Encode(map[string]string{"status": "deleted"})
+}
+
 func (h *Handler) ReplicationHandler(w http.ResponseWriter, r *http.Request) {
     var data map[string]string
-    json.NewDecoder(r.Body).Decode(&data)
+    if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+        http.Error(w, "Invalid request body", http.StatusBadRequest)
+        return
+    }
     key := data["key"]
     value := data["value"]
     h.store.Set(key, value)
+    w.WriteHeader(http.StatusOK)
+}
+
+func (h *Handler) ReplicateDeleteHandler(w http.ResponseWriter, r *http.Request) {
+    var data map[string]string
+    if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+        http.Error(w, "Invalid request body", http.StatusBadRequest)
+        return
+    }
+    key := data["key"]
+    h.store.Delete(key)
     w.WriteHeader(http.StatusOK)
 }
