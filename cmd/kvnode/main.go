@@ -22,6 +22,7 @@ func main() {
 
     store := kv.NewStore()
     cluster := cluster.NewPeerManager(self, peers)
+    cluster.ElectLeader()
     handler := api.NewHandler(store, cluster)
 
     log.Printf("Starting server at :%s...", port)

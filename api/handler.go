@@ -23,6 +23,7 @@ func NewHandler(store *kv.Store, peers *cluster.PeerManager) *Handler {
     r.HandleFunc("/delete/{key}", h.DeleteHandler).Methods("DELETE")
     r.HandleFunc("/replicate", h.ReplicationHandler).Methods("POST")
     r.HandleFunc("/replicate/delete", h.ReplicateDeleteHandler).Methods("POST")
+    r.HandleFunc("/leader", h.LeaderHandler).Methods("GET")
     h.router = r
     return h
 }
@@ -32,6 +33,10 @@ func (h *Handler) Router() http.Handler {
 }
 
 func (h *Handler) SetHandler(w http.ResponseWriter, r *http.Request) {
+    if !h.peers.IsLeader() {
+        http.Error(w, "Not leader", http.StatusForbidden)
+        return
+    }
     var data map[string]string
     if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
         http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -97,4 +102,8 @@ func (h *Handler) ReplicateDeleteHandler(w http.ResponseWriter, r *http.Request)
     key := data["key"]
     h.store.Delete(key)
     w.WriteHeader(http.StatusOK)
+}
+
+func (h *Handler) LeaderHandler(w http.ResponseWriter, r *http.Request) {
+    json.NewEncoder(w).Encode(map[string]string{"leader": h.peers.Leader})
 }

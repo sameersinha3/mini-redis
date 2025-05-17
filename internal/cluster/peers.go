@@ -6,6 +6,7 @@ import (
     "log"
     "net/http"
     "time"
+    "sort"
 )
 
 const (
@@ -17,6 +18,7 @@ const (
 type PeerManager struct {
     Self  string
     Peers []string
+    Leader string
 }
 
 func NewPeerManager(self string, peers []string) *PeerManager {
@@ -81,4 +83,14 @@ func (pm *PeerManager) sendWithRetry(url string, jsonData []byte) {
     
     log.Printf("Replication to %s permanently failed after %d attempts", 
         url, maxRetries)
+}
+
+func (pm *PeerManager) ElectLeader() {
+    all := append(pm.Peers, pm.Self)
+    sort.Strings(all) // Lexical leader
+    pm.Leader = all[0]
+}
+
+func (pm *PeerManager) IsLeader() bool {
+    return pm.Self == pm.Leader
 }
