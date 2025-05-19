@@ -35,3 +35,24 @@ func (s *Store) Delete(key string) bool {
     delete(s.store, key)
     return true
 }
+
+func (s *Store) GetAll() map[string]string {
+    s.mu.RLock()
+    defer s.mu.RUnlock()
+
+    copy := make(map[string]string, len(s.store))
+    for k, v := range s.store {
+        copy[k] = v
+    }
+    return copy
+}
+
+func (s *Store) LoadFromSnapshot(snapshot map[string]string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.store = make(map[string]string, len(snapshot))
+	for k, v := range snapshot {
+		s.store[k] = v
+	}
+}

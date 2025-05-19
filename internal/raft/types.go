@@ -2,6 +2,7 @@ package raft
 
 import (
 	"sync"
+	"distributed-kv-store-go/internal/kv"
 )
 
 type State int
@@ -22,4 +23,9 @@ type RaftNode struct {
 	leaderID           string
 	electionResetEvent chan struct{}
 	lastHeartbeat      int64
+	lastApplied		   int
+	snapshotIndex      int
+	snapshotTerm	   int
+	snapshot 		   *Snapshot
+	store 			   *kv.Store
 }

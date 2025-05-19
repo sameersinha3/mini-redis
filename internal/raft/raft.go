@@ -9,16 +9,24 @@ import (
 	"time"
 	"bytes"
 	"encoding/json"
+	"distributed-kv-store-go/internal/kv"
 )
 
-func NewRaftNode(selfID string, peers []string) *RaftNode {
+
+
+func NewRaftNode(selfID string, peers []string, store *kv.Store) *RaftNode {
 	rn := &RaftNode{
 		selfID:             selfID,
 		peers:              peers,
+		store:				store,
 		state:              Follower,
 		currentTerm:        0,
 		votedFor:           "",
 		electionResetEvent: make(chan struct{}),
+	}
+	rn.LoadSnapshot()
+	if rn.snapshot != nil {
+		rn.store.LoadFromSnapshot(rn.snapshot.State)
 	}
 	go rn.electionLoop()
 	return rn
@@ -183,4 +191,22 @@ func sendVoteRequest(peer string, candidateID string, term int) bool {
 	}
 
 	return respBody.VoteGranted
+}
+
+func (r *RaftNode) IsLeader() bool {
+    r.mu.Lock()
+    defer r.mu.Unlock()
+    return r.state == Leader
+}
+
+func (r *RaftNode) LastApplied() int {
+    r.mu.Lock()
+    defer r.mu.Unlock()
+    return r.lastApplied
+}
+
+func (r *RaftNode) CurrentTerm() int {
+    r.mu.Lock()
+    defer r.mu.Unlock()
+    return r.currentTerm
 }

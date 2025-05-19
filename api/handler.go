@@ -3,8 +3,10 @@ package api
 import (
     "distributed-kv-store-go/internal/cluster"
     "distributed-kv-store-go/internal/kv"
+    "distributed-kv-store-go/internal/raft"
     "encoding/json"
     "net/http"
+    
 
     "github.com/gorilla/mux"
 )
@@ -13,10 +15,11 @@ type Handler struct {
     store  *kv.Store
     peers  *cluster.PeerManager
     router *mux.Router
+    raftNode *raft.RaftNode
 }
 
-func NewHandler(store *kv.Store, peers *cluster.PeerManager) *Handler {
-    h := &Handler{store: store, peers: peers}
+func NewHandler(store *kv.Store, peers *cluster.PeerManager, rn *raft.RaftNode) *Handler {
+    h := &Handler{store: store, peers: peers, raftNode: rn}
     r := mux.NewRouter()
     r.HandleFunc("/set", h.SetHandler).Methods("POST")
     r.HandleFunc("/get/{key}", h.GetHandler).Methods("GET")
@@ -33,7 +36,7 @@ func (h *Handler) Router() http.Handler {
 }
 
 func (h *Handler) SetHandler(w http.ResponseWriter, r *http.Request) {
-    if !h.peers.IsLeader() {
+    if h.raftNode.GetLeader() != h.peers.Self {
         http.Error(w, "Not leader", http.StatusForbidden)
         return
     }
@@ -105,5 +108,6 @@ func (h *Handler) ReplicateDeleteHandler(w http.ResponseWriter, r *http.Request)
 }
 
 func (h *Handler) LeaderHandler(w http.ResponseWriter, r *http.Request) {
-    json.NewEncoder(w).Encode(map[string]string{"leader": h.peers.Leader})
+    leader := h.raftNode.GetLeader()
+    json.NewEncoder(w).Encode(map[string]string{"leader": leader})
 }
