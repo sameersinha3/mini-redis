@@ -18,11 +18,14 @@ func main() {
     }
 
     peers := strings.Split(os.Getenv("PEERS"), ",")
-    self := fmt.Sprintf("http://localhost:%s", port)
+    self := fmt.Sprintf("localhost:%s", port)
 
     store := kv.NewStore()
     cluster := cluster.NewPeerManager(self, peers)
     cluster.ElectLeader()
+    cluster.StartLeaderMonitor()
+
+    
     handler := api.NewHandler(store, cluster)
 
     log.Printf("Starting server at :%s...", port)

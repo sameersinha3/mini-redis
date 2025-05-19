@@ -7,6 +7,8 @@ import (
     "net/http"
     "time"
     "sort"
+    "fmt"
+    "sync"
 )
 
 const (
@@ -16,9 +18,11 @@ const (
 )
 
 type PeerManager struct {
-    Self  string
-    Peers []string
-    Leader string
+    Self      string
+    Peers     []string
+    LivePeers []string
+    Leader    string
+    mu        sync.RWMutex
 }
 
 func NewPeerManager(self string, peers []string) *PeerManager {
@@ -87,10 +91,97 @@ func (pm *PeerManager) sendWithRetry(url string, jsonData []byte) {
 
 func (pm *PeerManager) ElectLeader() {
     all := append(pm.Peers, pm.Self)
-    sort.Strings(all) // Lexical leader
+    sort.Strings(all) 
     pm.Leader = all[0]
 }
+
+func (pm *PeerManager) ElectLeaderFromLive() {
+    pm.mu.Lock()
+    defer pm.mu.Unlock()
+
+    livePeers := []string{}
+    for _, peer := range pm.LivePeers {
+        livePeers = append(livePeers, peer)
+    }
+    livePeers = append(livePeers, pm.Self)
+
+    sort.Strings(livePeers)
+    pm.Leader = livePeers[0]
+    fmt.Printf("New leader elected from live peers: %s\n", pm.Leader)
+}
+
 
 func (pm *PeerManager) IsLeader() bool {
     return pm.Self == pm.Leader
 }
+
+
+func (pm *PeerManager) UpdateLivePeers() {
+    var live []string
+    for _, peer := range pm.Peers {
+        if peer == pm.Self {
+            live = append(live, peer)
+            continue
+        }
+
+        url := fmt.Sprintf("http://%s/leader", peer)
+        client := http.Client{Timeout: 1 * time.Second}
+        resp, err := client.Get(url)
+        if err == nil && resp.StatusCode == http.StatusOK {
+            live = append(live, peer)
+        }
+        if resp != nil {
+            resp.Body.Close()
+        }
+    }
+
+    pm.mu.Lock()
+    pm.LivePeers = live
+    pm.mu.Unlock()
+}
+
+func (pm *PeerManager) IsLeaderAlive() bool {
+    if pm.Leader == "" {
+        return false
+    }
+
+    url := fmt.Sprintf("http://%s/leader", pm.Leader)
+    client := http.Client{Timeout: 1 * time.Second}
+
+    resp, err := client.Get(url)
+    if err != nil {
+        fmt.Printf("Failed to reach leader %s: %v\n", pm.Leader, err)
+        return false
+    }
+    defer resp.Body.Close()
+
+    return resp.StatusCode == http.StatusOK
+}
+
+
+func (pm *PeerManager) StartLeaderMonitor() {
+    go func() {
+        failCount := 0
+        ticker := time.NewTicker(3 * time.Second)
+
+        for range ticker.C {
+            pm.UpdateLivePeers()
+
+            if pm.IsLeader() {
+                continue
+            }
+
+            if pm.IsLeaderAlive() {
+                failCount = 0
+            } else {
+                failCount++
+                if failCount >= 3 {
+                    fmt.Println("Leader is down! Re-electing from live peers...")
+                    pm.ElectLeaderFromLive()
+                    failCount = 0
+                }
+            }
+        }
+    }()
+}
+
