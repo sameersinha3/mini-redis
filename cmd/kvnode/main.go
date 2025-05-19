@@ -4,6 +4,7 @@ import (
     "distributed-kv-store-go/api"
     "distributed-kv-store-go/internal/cluster"
     "distributed-kv-store-go/internal/kv"
+    "distributed-kv-store-go/internal/raft"
     "fmt"
     "log"
     "net/http"
@@ -22,12 +23,16 @@ func main() {
 
     store := kv.NewStore()
     cluster := cluster.NewPeerManager(self, peers)
-    cluster.ElectLeader()
-    cluster.StartLeaderMonitor()
 
-    
+    rn := raft.NewRaftNode(self, peers)
+
     handler := api.NewHandler(store, cluster)
 
+    mux := http.NewServeMux()
+    raft.RegisterRaftHandlers(mux, rn)
+
+    mux.Handle("/api/", handler.Router())
+
     log.Printf("Starting server at :%s...", port)
-    log.Fatal(http.ListenAndServe(":"+port, handler.Router()))
+    log.Fatal(http.ListenAndServe(":"+port, mux))
 }
