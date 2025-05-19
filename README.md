@@ -4,8 +4,8 @@
 
 ### Start 2 nodes in separate terminals:
 ```bash
-PORT=8080 PEERS=http://localhost:8081 go run cmd/kvnode/main.go
-PORT=8081 PEERS=http://localhost:8080 go run cmd/kvnode/main.go
+PORT=8080 PEERS=localhost:8081 go run cmd/kvnode/main.go
+PORT=8081 PEERS=localhost:8080 go run cmd/kvnode/main.go
 ```
 
 ### Set and Get Key
